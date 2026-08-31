@@ -1,19 +1,28 @@
 import { useState } from "react";
-import { Link, NavLink } from "react-router-dom";
+import { Link, NavLink, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
-import { RiSwordLine, RiTrophyLine, RiUserLine, RiMenuLine, RiCloseLine } from "react-icons/ri";
+import { RiSwordLine, RiTrophyLine, RiUserLine, RiMenuLine, RiCloseLine, RiLogoutBoxLine } from "react-icons/ri";
 import styles from "./Navbar.module.css";
 import { Logo } from "./Logo";
 import { Button } from "./Button";
+import { useAuthStore } from "@/store/authStore";
 
 const NAV_LINKS = [
-  { to: "/play",        label: "Jogar",         icon: RiSwordLine   },
-  { to: "/leaderboard", label: "Classificação",  icon: RiTrophyLine  },
-  { to: "/profile",     label: "Perfil",         icon: RiUserLine    },
+  { to: "/play",        label: "Jogar",        icon: RiSwordLine  },
+  { to: "/leaderboard", label: "Classificação", icon: RiTrophyLine },
+  { to: "/profile",     label: "Perfil",        icon: RiUserLine   },
 ];
 
 export function Navbar() {
+  const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { user, logout } = useAuthStore();
+
+  const handleLogout = () => {
+    logout();
+    navigate("/");
+    setMobileOpen(false);
+  };
 
   return (
     <>
@@ -45,8 +54,19 @@ export function Navbar() {
           </nav>
 
           <div className={styles.actions}>
-            <Button variant="ghost" size="sm">Entrar</Button>
-            <Button variant="primary" size="sm">Cadastrar</Button>
+            {user ? (
+              <>
+                <span className={styles.navUser}><RiUserLine size={13} />{user.username}</span>
+                <Button variant="ghost" size="sm" onClick={handleLogout}>
+                  <RiLogoutBoxLine size={13} />Sair
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button variant="ghost" size="sm" onClick={() => navigate("/login")}>Entrar</Button>
+                <Button variant="primary" size="sm" onClick={() => navigate("/register")}>Cadastrar</Button>
+              </>
+            )}
           </div>
 
           <button
@@ -82,8 +102,16 @@ export function Navbar() {
               </NavLink>
             ))}
             <div className={styles.mobileDivider} />
-            <Button variant="ghost" size="sm" fullWidth>Entrar</Button>
-            <Button variant="primary" size="sm" fullWidth>Cadastrar</Button>
+            {user ? (
+              <Button variant="ghost" size="sm" fullWidth onClick={handleLogout}>
+                <RiLogoutBoxLine size={13} />Sair
+              </Button>
+            ) : (
+              <>
+                <Button variant="ghost" size="sm" fullWidth onClick={() => { navigate("/login"); setMobileOpen(false); }}>Entrar</Button>
+                <Button variant="primary" size="sm" fullWidth onClick={() => { navigate("/register"); setMobileOpen(false); }}>Cadastrar</Button>
+              </>
+            )}
           </motion.div>
         )}
       </AnimatePresence>

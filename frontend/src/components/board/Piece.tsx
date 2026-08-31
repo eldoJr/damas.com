@@ -1,5 +1,6 @@
 import { motion } from "motion/react";
 import clsx from "clsx";
+import { RiVipCrownLine } from "react-icons/ri";
 import styles from "./Piece.module.css";
 import type { Piece as PieceType } from "../../../../shared/types";
 
@@ -28,7 +29,7 @@ export function Piece({ piece, selected = false, onClick }: PieceProps) {
           animate={{ scale: 1, rotate: 0 }}
           transition={{ type: "spring", stiffness: 500, damping: 20 }}
         >
-          ♛
+          <RiVipCrownLine />
         </motion.span>
       )}
     </motion.div>

@@ -11,9 +11,16 @@ const INITIAL: (0 | 1 | 2)[][] = [
   [1,0,1,0,1,0,1,0],
 ];
 
-export function MiniBoard() {
+interface MiniBoardProps {
+  size?: string;
+}
+
+export function MiniBoard({ size }: MiniBoardProps) {
   return (
-    <div className={styles.board}>
+    <div
+      className={styles.board}
+      style={size ? { width: size, height: size } : undefined}
+    >
       {INITIAL.map((row, r) =>
         row.map((cell, c) => {
           const isDark = (r + c) % 2 !== 0;

@@ -1,93 +1,377 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { motion } from "motion/react";
-import { RiFlashlightLine, RiLinksLine, RiArrowRightLine, RiLoginBoxLine } from "react-icons/ri";
+import { motion, AnimatePresence } from "motion/react";
+import {
+  RiFlashlightLine,
+  RiRobotLine,
+  RiLinksLine,
+  RiTrophyLine,
+  RiHistoryLine,
+  RiBarChartLine,
+  RiArrowRightSLine,
+  RiArrowLeftLine,
+  RiLoginBoxLine,
+  RiUserLine,
+  RiTimeLine,
+} from "react-icons/ri";
 import styles from "./Play.module.css";
+import { DragBoard } from "@/components/board/DragBoard";
 import { Button } from "@/components/ui/Button";
 
+/* ── Time controls ──────────────────────────────── */
+interface TimeControl {
+  label: string;
+  value: string;   // display on clock e.g. "1:00"
+  seconds: number;
+}
+
+const TIME_GROUPS: { category: string; icon: React.ElementType; controls: TimeControl[] }[] = [
+  {
+    category: "Bala",
+    icon: RiFlashlightLine,
+    controls: [
+      { label: "1 min",   value: "1:00",  seconds: 60  },
+      { label: "2+1",     value: "2:00",  seconds: 120 },
+      { label: "3 min",   value: "3:00",  seconds: 180 },
+    ],
+  },
+  {
+    category: "Rápida",
+    icon: RiTimeLine,
+    controls: [
+      { label: "5 min",   value: "5:00",  seconds: 300 },
+      { label: "10 min",  value: "10:00", seconds: 600 },
+      { label: "15+10",   value: "15:00", seconds: 900 },
+    ],
+  },
+  {
+    category: "Clássica",
+    icon: RiBarChartLine,
+    controls: [
+      { label: "30 min",  value: "30:00", seconds: 1800 },
+      { label: "45+45",   value: "45:00", seconds: 2700 },
+      { label: "Sem lim.", value: "∞",    seconds: 0    },
+    ],
+  },
+];
+
+const ALL_CONTROLS = TIME_GROUPS.flatMap(g => g.controls);
+
+/* ── Time picker sub-component ──────────────────── */
+function TimePicker({
+  selected,
+  onChange,
+}: {
+  selected: TimeControl;
+  onChange: (t: TimeControl) => void;
+}) {
+  return (
+    <div className={styles.timePicker}>
+      {TIME_GROUPS.map(group => {
+        const Icon = group.icon;
+        return (
+          <div key={group.category} className={styles.timeGroup}>
+            <div className={styles.timeGroupLabel}>
+              <Icon size={11} />
+              {group.category}
+            </div>
+            <div className={styles.timeRow}>
+              {group.controls.map(tc => (
+                <button
+                  key={tc.label}
+                  className={`${styles.timeBtn} ${selected.label === tc.label ? styles.timeBtnActive : ""}`}
+                  onClick={() => onChange(tc)}
+                >
+                  {tc.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ── Bot levels ─────────────────────────────────── */
+const BOT_LEVELS = [
+  { label: "Fácil",   elo: "400",  color: "#81b64c" },
+  { label: "Médio",   elo: "800",  color: "#e8a838" },
+  { label: "Difícil", elo: "1200", color: "#e05252" },
+  { label: "Mestre",  elo: "1800", color: "#9b59b6" },
+];
+
+/* ── Panel components ───────────────────────────── */
+function OnlinePanel({
+  time, onTimeChange, onPlay,
+}: {
+  time: TimeControl;
+  onTimeChange: (t: TimeControl) => void;
+  onPlay: () => void;
+}) {
+  return (
+    <>
+      <p className={styles.panelDesc}>
+        Seja pareado com um jogador de nível similar. Escolha o controle de tempo:
+      </p>
+      <TimePicker selected={time} onChange={onTimeChange} />
+      <Button fullWidth onClick={onPlay}>
+        <RiFlashlightLine size={15} />
+        Encontrar Partida · {time.label}
+      </Button>
+    </>
+  );
+}
+
+function BotsPanel({
+  time, onTimeChange,
+}: {
+  time: TimeControl;
+  onTimeChange: (t: TimeControl) => void;
+}) {
+  const navigate = useNavigate();
+  const [level, setLevel] = useState(0);
+  const levelKeys = ["easy", "medium", "hard", "master"] as const;
+  return (
+    <>
+      <div className={styles.botGrid}>
+        {BOT_LEVELS.map((b, i) => (
+          <button
+            key={b.label}
+            className={`${styles.botBtn} ${level === i ? styles.botBtnActive : ""}`}
+            style={{ "--bot-color": b.color } as React.CSSProperties}
+            onClick={() => setLevel(i)}
+          >
+            <RiRobotLine size={15} />
+            <span className={styles.botLabel}>{b.label}</span>
+            <span className={styles.botElo}>{b.elo} ELO</span>
+          </button>
+        ))}
+      </div>
+      <TimePicker selected={time} onChange={onTimeChange} />
+      <Button fullWidth onClick={() => navigate(`/bot/${levelKeys[level]}`)}>
+        <RiRobotLine size={15} />
+        Jogar · {BOT_LEVELS[level].label} · {time.label}
+      </Button>
+    </>
+  );
+}
+
+function FriendPanel({
+  time, onTimeChange, onPlay,
+}: {
+  time: TimeControl;
+  onTimeChange: (t: TimeControl) => void;
+  onPlay: () => void;
+}) {
+  const navigate = useNavigate();
+  const [code, setCode] = useState("");
+  const join = () => { if (code.trim()) navigate(`/game/${code.trim().toUpperCase()}`); };
+
+  return (
+    <>
+      <TimePicker selected={time} onChange={onTimeChange} />
+      <Button fullWidth variant="secondary" onClick={onPlay}>
+        <RiLinksLine size={15} />
+        Criar Sala · {time.label}
+      </Button>
+      <div className={styles.orRow}><span>ou entre com um código</span></div>
+      <div className={styles.joinRow}>
+        <input
+          className={styles.input}
+          placeholder="Código da sala"
+          value={code}
+          onChange={e => setCode(e.target.value.toUpperCase())}
+          onKeyDown={e => e.key === "Enter" && join()}
+          maxLength={6}
+          spellCheck={false}
+        />
+        <Button variant="secondary" onClick={join}>
+          <RiLoginBoxLine size={15} />
+          Entrar
+        </Button>
+      </div>
+    </>
+  );
+}
+
+/* ── Menu definition ────────────────────────────── */
+type PanelId = "online" | "bots" | "friend";
+
+const MENU = [
+  { id: "online"      as PanelId, icon: RiFlashlightLine, label: "Jogar Online",     desc: "Contra jogador de nível similar",       action: "panel"    },
+  { id: "bots"        as PanelId, icon: RiRobotLine,      label: "Jogar contra Bot", desc: "Do Fácil ao Mestre",                    action: "panel"    },
+  { id: "friend"      as PanelId, icon: RiLinksLine,      label: "Jogar com Amigo",  desc: "Sala privada com link compartilhável",  action: "panel"    },
+  { id: null,                     icon: RiTrophyLine,      label: "Torneios",         desc: "Arenas abertas a todos",                action: "navigate", to: "/tournaments" },
+  { id: null,                     icon: RiHistoryLine,     label: "Histórico",        desc: "Revise suas partidas anteriores",       action: "navigate", to: "/profile"     },
+  { id: null,                     icon: RiBarChartLine,    label: "Classificação",    desc: "Ranking global por ELO",                action: "navigate", to: "/leaderboard" },
+] as const;
+
+/* ── Main ───────────────────────────────────────── */
 export function Play() {
   const navigate = useNavigate();
-  const [roomCode, setRoomCode] = useState("");
+  const [panel, setPanel] = useState<PanelId | null>(null);
+  const [time, setTime] = useState<TimeControl>(ALL_CONTROLS[3]); // 5 min default
 
   const createRoom = () => {
     const id = Math.random().toString(36).slice(2, 8).toUpperCase();
     navigate(`/game/${id}`);
   };
 
-  const joinRoom = () => {
-    if (roomCode.trim()) navigate(`/game/${roomCode.trim().toUpperCase()}`);
-  };
+  const clockDisplay = time.seconds === 0 ? "∞" : time.value;
 
   return (
-    <div className={styles.page}>
-      <motion.div
-        className={styles.container}
-        initial={{ opacity: 0, y: 24 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, ease: "easeOut" }}
-      >
-        <h1 className={styles.title}>Jogar Damas</h1>
-        <p className={styles.subtitle}>Crie uma sala ou entre na partida de um amigo</p>
+    <motion.div
+      className={styles.page}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.3 }}
+    >
+      <div className={styles.layout}>
 
-        <div className={styles.cards}>
-          {/* Quick play */}
-          <motion.div
-            className={styles.card}
-            whileHover={{ y: -3 }}
-            transition={{ duration: 0.18 }}
-          >
-            <div className={styles.cardIconWrap}>
-              <RiFlashlightLine size={24} />
+        {/* ── Board column ── */}
+        <div className={styles.boardColumn}>
+
+          <div className={styles.playerBar}>
+            <div className={styles.playerInfo}>
+              <div className={styles.avatar}><RiUserLine size={14} /></div>
+              <div>
+                <div className={styles.playerName}>Oponente</div>
+                <div className={styles.playerRating}>— ELO</div>
+              </div>
             </div>
-            <h2 className={styles.cardTitle}>Partida Rápida</h2>
-            <p className={styles.cardDesc}>
-              Seja pareado com um oponente aleatório instantaneamente.
-            </p>
-            <Button fullWidth onClick={createRoom}>
-              Encontrar Partida
-              <RiArrowRightLine />
-            </Button>
-          </motion.div>
-
-          <div className={styles.divider}>
-            <span>ou</span>
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={clockDisplay}
+                className={`${styles.clock} ${panel ? styles.clockSet : ""}`}
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 4 }}
+                transition={{ duration: 0.15 }}
+              >
+                <RiTimeLine size={12} />
+                <span>{panel ? clockDisplay : "--:--"}</span>
+              </motion.div>
+            </AnimatePresence>
           </div>
 
-          {/* Play a friend */}
-          <motion.div
-            className={styles.card}
-            whileHover={{ y: -3 }}
-            transition={{ duration: 0.18 }}
-          >
-            <div className={styles.cardIconWrap}>
-              <RiLinksLine size={24} />
+          <div className={styles.boardWrap}>
+            <DragBoard />
+          </div>
+
+          <div className={`${styles.playerBar} ${styles.playerBarSelf}`}>
+            <div className={styles.playerInfo}>
+              <div className={`${styles.avatar} ${styles.avatarSelf}`}><RiUserLine size={14} /></div>
+              <div>
+                <div className={styles.playerName}>Você (Visitante)</div>
+                <div className={styles.playerRating}>— ELO</div>
+              </div>
             </div>
-            <h2 className={styles.cardTitle}>Jogar com Amigo</h2>
-            <p className={styles.cardDesc}>
-              Crie uma sala privada e compartilhe o link.
-            </p>
-            <Button fullWidth variant="secondary" onClick={createRoom}>
-              <RiLinksLine />
-              Criar Sala
-            </Button>
-            <div className={styles.joinRow}>
-              <input
-                className={styles.input}
-                placeholder="Código da sala"
-                value={roomCode}
-                onChange={e => setRoomCode(e.target.value.toUpperCase())}
-                onKeyDown={e => e.key === "Enter" && joinRoom()}
-                maxLength={6}
-                spellCheck={false}
-              />
-              <Button variant="secondary" onClick={joinRoom}>
-                <RiLoginBoxLine />
-                Entrar
-              </Button>
-            </div>
-          </motion.div>
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={clockDisplay}
+                className={`${styles.clock} ${panel ? styles.clockSet : ""}`}
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 4 }}
+                transition={{ duration: 0.15 }}
+              >
+                <RiTimeLine size={12} />
+                <span>{panel ? clockDisplay : "--:--"}</span>
+              </motion.div>
+            </AnimatePresence>
+          </div>
+
         </div>
-      </motion.div>
-    </div>
+
+        {/* ── Sidebar ── */}
+        <aside className={styles.sidebar}>
+
+          <div className={styles.sideHeader}>
+            <AnimatePresence mode="wait">
+              {panel ? (
+                <motion.button
+                  key="back"
+                  className={styles.backBtn}
+                  onClick={() => setPanel(null)}
+                  initial={{ opacity: 0, x: -8 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -8 }}
+                  transition={{ duration: 0.15 }}
+                >
+                  <RiArrowLeftLine size={14} />
+                  {MENU.find(m => m.id === panel)?.label}
+                </motion.button>
+              ) : (
+                <motion.span
+                  key="title"
+                  className={styles.sideTitle}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.15 }}
+                >
+                  Jogar
+                </motion.span>
+              )}
+            </AnimatePresence>
+          </div>
+
+          <div className={styles.sideBody}>
+            <AnimatePresence mode="wait">
+
+              {!panel && (
+                <motion.nav
+                  key="menu"
+                  className={styles.menu}
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                  transition={{ duration: 0.18 }}
+                >
+                  {MENU.map(item => {
+                    const Icon = item.icon;
+                    return (
+                      <button
+                        key={item.label}
+                        className={styles.menuItem}
+                        onClick={() => {
+                          if (item.action === "panel" && item.id) setPanel(item.id);
+                          else if (item.action === "navigate" && "to" in item) navigate(item.to);
+                        }}
+                      >
+                        <div className={styles.menuIcon}><Icon size={17} /></div>
+                        <div className={styles.menuText}>
+                          <span className={styles.menuLabel}>{item.label}</span>
+                          <span className={styles.menuDesc}>{item.desc}</span>
+                        </div>
+                        <RiArrowRightSLine size={15} className={styles.menuArrow} />
+                      </button>
+                    );
+                  })}
+                </motion.nav>
+              )}
+
+              {panel && (
+                <motion.div
+                  key={panel}
+                  className={styles.panelContent}
+                  initial={{ opacity: 0, x: 24 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 24 }}
+                  transition={{ duration: 0.18 }}
+                >
+                  {panel === "online" && <OnlinePanel time={time} onTimeChange={setTime} onPlay={createRoom} />}
+                  {panel === "bots"   && <BotsPanel   time={time} onTimeChange={setTime} />}
+                  {panel === "friend" && <FriendPanel time={time} onTimeChange={setTime} onPlay={createRoom} />}
+                </motion.div>
+              )}
+
+            </AnimatePresence>
+          </div>
+
+        </aside>
+      </div>
+    </motion.div>
   );
 }
