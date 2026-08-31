@@ -1,0 +1,37 @@
+.board {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  grid-template-rows: repeat(8, 1fr);
+  width: 320px;
+  height: 320px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  box-shadow: var(--shadow-lg);
+  border: 2px solid var(--color-border);
+}
+
+.sq {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.light { background: var(--color-square-light); }
+.dark  { background: var(--color-square-dark); }
+
+.piece {
+  width: 72%;
+  height: 72%;
+  border-radius: 50%;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.2);
+}
+
+.pLight {
+  background: radial-gradient(circle at 35% 35%, #fff 0%, #f0e8d8 60%, #c8b89a 100%);
+  border: 1.5px solid rgba(0,0,0,0.12);
+}
+
+.pDark {
+  background: radial-gradient(circle at 35% 35%, #555 0%, #2c2c2c 60%, #111 100%);
+  border: 1.5px solid rgba(255,255,255,0.06);
+}

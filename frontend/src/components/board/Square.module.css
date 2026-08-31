@@ -1,0 +1,36 @@
+.square {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: default;
+}
+
+.light { background-color: var(--color-square-light); }
+.dark  { background-color: var(--color-square-dark); }
+.selected { background-color: var(--color-square-selected) !important; }
+
+.movable { cursor: pointer; }
+
+.movable::after {
+  content: "";
+  position: absolute;
+  width: 28%;
+  height: 28%;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.22);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.capturable { cursor: pointer; }
+
+.capturable::before {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border-radius: 50%;
+  border: 3px solid rgba(220, 60, 60, 0.75);
+  pointer-events: none;
+  z-index: 1;
+}

@@ -1,0 +1,104 @@
+/* ============================================================
+   DAMAS.COM — Design Tokens v2
+   ============================================================ */
+
+:root {
+  /* --- Background layers --- */
+  --color-bg:           #0f0f0f;
+  --color-surface:      #181818;
+  --color-surface-2:    #222222;
+  --color-surface-3:    #2a2a2a;
+  --color-border:       #2e2e2e;
+  --color-border-hover: #484848;
+
+  /* --- Board --- */
+  --color-square-light:    #f0d9b5;
+  --color-square-dark:     #b58863;
+  --color-square-selected: #f6f669cc;
+  --color-square-move:     rgba(129, 182, 76, 0.35);
+  --color-square-capture:  rgba(220, 60, 60, 0.5);
+  --color-square-last:     rgba(246, 246, 105, 0.28);
+
+  /* --- Pieces --- */
+  --color-piece-light:  #f5f0e8;
+  --color-piece-dark:   #2c2c2c;
+  --color-piece-crown:  #f0c040;
+
+  /* --- Accent (green) --- */
+  --color-accent:       #81b64c;
+  --color-accent-hover: #97d15f;
+  --color-accent-dim:   rgba(129, 182, 76, 0.12);
+  --color-accent-glow:  rgba(129, 182, 76, 0.25);
+
+  /* --- Semantic --- */
+  --color-danger:       #e05252;
+  --color-danger-dim:   rgba(224, 82, 82, 0.12);
+  --color-warning:      #e8a838;
+  --color-info:         #5b9bd5;
+
+  /* --- Text --- */
+  --color-text-primary:   #efefef;
+  --color-text-secondary: #999;
+  --color-text-muted:     #555;
+
+  /* --- Typography --- */
+  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", monospace;
+
+  --text-xs:   0.6875rem;
+  --text-sm:   0.8125rem;
+  --text-base: 1rem;
+  --text-lg:   1.125rem;
+  --text-xl:   1.25rem;
+  --text-2xl:  1.5rem;
+  --text-3xl:  1.875rem;
+  --text-4xl:  2.5rem;
+  --text-5xl:  3.25rem;
+
+  --font-normal:   400;
+  --font-medium:   500;
+  --font-semibold: 600;
+  --font-bold:     700;
+  --font-extrabold:800;
+
+  /* --- Spacing --- */
+  --space-1:  0.25rem;
+  --space-2:  0.5rem;
+  --space-3:  0.75rem;
+  --space-4:  1rem;
+  --space-5:  1.25rem;
+  --space-6:  1.5rem;
+  --space-8:  2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+  --space-20: 5rem;
+  --space-24: 6rem;
+
+  /* --- Radii --- */
+  --radius-sm:   4px;
+  --radius-md:   8px;
+  --radius-lg:   12px;
+  --radius-xl:   16px;
+  --radius-2xl:  20px;
+  --radius-full: 9999px;
+
+  /* --- Shadows --- */
+  --shadow-sm:    0 1px 3px rgba(0,0,0,0.5);
+  --shadow-md:    0 4px 16px rgba(0,0,0,0.6);
+  --shadow-lg:    0 8px 40px rgba(0,0,0,0.7);
+  --shadow-xl:    0 20px 60px rgba(0,0,0,0.8);
+  --shadow-piece: 0 4px 10px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.18);
+  --shadow-glow:  0 0 24px var(--color-accent-glow);
+
+  /* --- Transitions --- */
+  --transition-fast:   120ms ease;
+  --transition-normal: 220ms ease;
+  --transition-slow:   380ms ease;
+
+  /* --- Layout --- */
+  --navbar-height: 60px;
+  --sidebar-width: 288px;
+  --board-max:     560px;
+  --content-max:   1140px;
+}
