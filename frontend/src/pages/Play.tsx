@@ -205,7 +205,7 @@ function BotsPanel({ time, onTimeChange }: { time: TimeControl; onTimeChange: (t
         ))}
       </div>
       <TimePicker selected={time} onChange={onTimeChange} />
-      <Button fullWidth onClick={() => navigate(`/bot/${levelKeys[level]}`)}>
+      <Button fullWidth onClick={() => navigate(`/bot/${levelKeys[level]}?t=${time.seconds}`)}>
         <RiRobotLine size={15} />
         Jogar · {BOT_LEVELS[level].label} · {time.label}
       </Button>
