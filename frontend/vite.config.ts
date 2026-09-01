@@ -8,4 +8,17 @@ export default defineConfig({
     alias: { "@": path.resolve(__dirname, "./src") },
   },
   server: { port: 3000 },
+  build: {
+    outDir: "dist",
+    sourcemap: false,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ["react", "react-dom", "react-router-dom"],
+          socket: ["socket.io-client"],
+          state: ["zustand"],
+        },
+      },
+    },
+  },
 });
