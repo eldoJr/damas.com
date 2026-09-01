@@ -10,7 +10,24 @@ interface RoomMeta {
   finished:  boolean;
 }
 
+interface QueueEntry {
+  socketId: string;
+  userId:   string | null;
+  username: string | null;
+  elo:      number;
+  joinedAt: number;
+}
+
 const rooms = new Map<string, RoomMeta>();
+// key = timeControl string (e.g. "5+0"), value = queue of waiting players
+const queues = new Map<string, QueueEntry[]>();
+
+function dequeue(socketId: string) {
+  for (const [key, q] of queues) {
+    const idx = q.findIndex(e => e.socketId === socketId);
+    if (idx !== -1) { q.splice(idx, 1); if (q.length === 0) queues.delete(key); return; }
+  }
+}
 
 function getRoomOrCreate(roomId: string): RoomMeta {
   if (!rooms.has(roomId)) {
@@ -36,8 +53,74 @@ export function registerSocketHandlers(io: Server): void {
       } catch { /* guest */ }
     }
 
+    /* ── join_queue: matchmaking ── */
+    socket.on("join_queue", ({ timeControl, elo }: { timeControl: string; elo?: number }) => {
+      dequeue(socket.id); // remove from any previous queue
+      const entry: QueueEntry = { socketId: socket.id, userId, username, elo: elo ?? 1200, joinedAt: Date.now() };
+      const q = queues.get(timeControl) ?? [];
+      queues.set(timeControl, q);
+
+      // Find best opponent: closest ELO, or first in queue if guest
+      const opponentIdx = q.reduce((best, e, i) => {
+        if (best === -1) return i;
+        return Math.abs(e.elo - entry.elo) < Math.abs(q[best].elo - entry.elo) ? i : best;
+      }, -1);
+
+      if (opponentIdx !== -1) {
+        const opponent = q.splice(opponentIdx, 1)[0];
+        if (q.length === 0) queues.delete(timeControl);
+
+        const roomId = Math.random().toString(36).slice(2, 8).toUpperCase();
+        // Randomly assign colors
+        const [white, black] = Math.random() < 0.5
+          ? [opponent, entry]
+          : [entry, opponent];
+
+        rooms.set(roomId, {
+          players:     [white.socketId, black.socketId],
+          userIds:     [white.userId,   black.userId],
+          usernames:   [white.username, black.username],
+          timeControl,
+          finished:    false,
+        });
+
+        // Tell both players which room and seat they got
+        io.to(white.socketId).emit("match_found", { roomId, seat: "white", timeControl });
+        io.to(black.socketId).emit("match_found", { roomId, seat: "black", timeControl });
+      } else {
+        q.push(entry);
+        socket.emit("queue_joined", { timeControl });
+      }
+    });
+
+    socket.on("leave_queue", () => {
+      dequeue(socket.id);
+      socket.emit("queue_left");
+    });
+
     /* ── join_room ── */
     socket.on("join_room", (roomId: string) => {
+      const existingRoom = rooms.get(roomId);
+
+      // Matchmaking pre-created room: find which seat this socket was assigned
+      if (existingRoom) {
+        const preassigned = existingRoom.players.indexOf(socket.id) as 0 | 1 | -1;
+        if (preassigned !== -1) {
+          // Socket was pre-assigned by matchmaking
+          seatIndex   = preassigned as 0 | 1;
+          currentRoom = roomId;
+          socket.join(roomId);
+          socket.emit("seat_assigned", { seat: seatIndex === 0 ? "white" : "black", roomId });
+          // Count how many pre-assigned players have now joined
+          const joined = (existingRoom as any)._joined = ((existingRoom as any)._joined ?? 0) + 1;
+          if (joined >= 2) {
+            io.to(roomId).emit("game_start", { roomId, usernames: existingRoom.usernames });
+          }
+          return;
+        }
+      }
+
+      // Manual room (friend invite) — create if needed
       const room = getRoomOrCreate(roomId);
 
       if (!room.players[0]) {
@@ -61,10 +144,7 @@ export function registerSocketHandlers(io: Server): void {
       socket.emit("seat_assigned", { seat: seatIndex === 0 ? "white" : "black", roomId });
 
       if (room.players[0] && room.players[1]) {
-        io.to(roomId).emit("game_start", {
-          roomId,
-          usernames: room.usernames,   // [white_username, black_username]
-        });
+        io.to(roomId).emit("game_start", { roomId, usernames: room.usernames });
       } else {
         socket.emit("waiting_for_opponent");
       }
@@ -113,6 +193,7 @@ export function registerSocketHandlers(io: Server): void {
 
     /* ── disconnect ── */
     socket.on("disconnect", () => {
+      dequeue(socket.id); // remove from matchmaking queue if waiting
       if (!currentRoom || seatIndex === null) return;
       const room = rooms.get(currentRoom);
       if (!room) return;

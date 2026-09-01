@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -15,9 +15,19 @@ import { useSocketStore } from "@/store/socketStore";
 import { useAuthStore } from "@/store/authStore";
 import type { PieceColor } from "@/store/gameStore";
 
-function PlayerBar({ name, rating, isSelf, isActive }: {
+function fmtClock(s: number): string {
+  if (s <= 0) return "0:00";
+  const m = Math.floor(s / 60);
+  const sec = s % 60;
+  return `${m}:${String(sec).padStart(2, "0")}`;
+}
+
+function PlayerBar({ name, rating, isSelf, isActive, timeLeft, unlimited }: {
   name: string; rating: string; isSelf?: boolean; isActive: boolean;
+  timeLeft: number; unlimited: boolean;
 }) {
+  const low = !unlimited && timeLeft > 0 && timeLeft <= 10;
+  const out = !unlimited && timeLeft <= 0;
   return (
     <div className={`${styles.playerBar} ${isActive ? styles.playerBarActive : ""}`}>
       <div className={styles.playerInfo}>
@@ -30,9 +40,9 @@ function PlayerBar({ name, rating, isSelf, isActive }: {
         </div>
       </div>
       <div className={styles.playerRight}>
-        <div className={`${styles.clock} ${isActive ? styles.clockActive : ""}`}>
+        <div className={`${styles.clock} ${isActive ? styles.clockActive : ""} ${low ? styles.clockLow : ""} ${out ? styles.clockOut : ""}`}>
           <RiTimeLine size={12} />
-          <span>--:--</span>
+          <span>{unlimited ? "∞" : fmtClock(timeLeft)}</span>
         </div>
       </div>
     </div>
@@ -52,62 +62,105 @@ export function Game() {
     seat, phase, opponentName,
   } = useSocketStore();
 
+  // Clocks: [white, black] seconds. Initialized once when phase → "playing".
+  const [clocks, setClocks]   = useState<[number, number]>([0, 0]);
+  const unlimitedRef          = useRef(true);   // set at game start
+  const clocksReadyRef        = useRef(false);  // true after first init
+  const tickRef               = useRef<ReturnType<typeof setInterval> | null>(null);
+
   const [copied, setCopied]   = useState(false);
   const [modal, setModal]     = useState<ModalKind | null>(null);
   const resultSentRef         = useRef(false);
 
-  // Connect socket on mount — init() clears any stale game state immediately
   useEffect(() => {
     if (!roomId) return;
-    // Reset game state right away so stale results from previous games don't
-    // trigger the result modal before game_start fires
     useGameStore.getState().init();
-    resultSentRef.current = false;
+    resultSentRef.current  = false;
+    clocksReadyRef.current = false;
+    unlimitedRef.current   = true;
     connect(roomId, token);
     return () => disconnect();
   }, [roomId]);
 
-  // seat=white → light pieces at bottom (normal)
-  // seat=black → dark pieces at bottom (flipped)
-  const boardFlipped = seat === "black";
-  const ourColor: PieceColor = seat === "black" ? "dark" : "light";
-
-  // Handle draw-offered phase
+  // Init clocks exactly once when game starts
   useEffect(() => {
-    if (phase === "draw-offered") {
-      setModal({ type: "draw-offer" });
-    }
+    if (phase !== "playing" || clocksReadyRef.current) return;
+    clocksReadyRef.current = true;
+    const secs = useSocketStore.getState().timeSeconds;
+    unlimitedRef.current = secs === 0;
+    setClocks([secs, secs]);
   }, [phase]);
 
-  // When gameStore detects a win/draw locally, emit game_over so both players get phase=finished
+  /* ── Clock tick ── */
+  const stopClock = useCallback(() => {
+    if (tickRef.current) { clearInterval(tickRef.current); tickRef.current = null; }
+  }, []);
+
+  const startClock = useCallback((color: "white" | "black") => {
+    stopClock();
+    if (unlimitedRef.current) return;
+    const idx = color === "white" ? 0 : 1;
+    tickRef.current = setInterval(() => {
+      setClocks(prev => {
+        const next = prev[idx] - 1;
+        if (next <= 0) {
+          stopClock();
+          const loserColor: PieceColor = color === "white" ? "light" : "dark";
+          const { socket, roomId: rid } = useSocketStore.getState();
+          if (socket && rid) {
+            socket.emit("game_over", { roomId: rid, result: "win", winner: color === "white" ? "black" : "white" });
+          }
+          useGameStore.getState().resign(loserColor);
+          return color === "white" ? [0, prev[1]] : [prev[0], 0];
+        }
+        return color === "white" ? [next, prev[1]] : [prev[0], next];
+      });
+    }, 1000);
+  }, [stopClock]);
+
+  // Switch clock on turn change
+  useEffect(() => {
+    if (status !== "playing" || phase !== "playing" || !clocksReadyRef.current) {
+      stopClock();
+      return;
+    }
+    startClock(currentTurn === "light" ? "white" : "black");
+    return stopClock;
+  }, [currentTurn, status, phase]);
+
+  useEffect(() => {
+    if (status === "finished") stopClock();
+  }, [status]);
+
+  const boardFlipped = seat === "black";
+  const ourColor: PieceColor = seat === "black" ? "dark" : "light";
+  const ourClockIdx  = seat === "white" ? 0 : 1;
+  const oppClockIdx  = seat === "white" ? 1 : 0;
+  const unlimited    = unlimitedRef.current;
+
+  useEffect(() => {
+    if (phase === "draw-offered") setModal({ type: "draw-offer" });
+  }, [phase]);
+
   useEffect(() => {
     if (status !== "finished") return;
-    if (phase === "finished") return;  // already handled
+    if (phase === "finished") return;
     if (resultSentRef.current) return;
     const { socket, roomId: rid } = useSocketStore.getState();
     if (!socket || !rid) return;
     if (winner) {
-      const winnerSeat = winner === "light" ? "white" : "black";
-      socket.emit("game_over", { roomId: rid, result: "win", winner: winnerSeat });
+      socket.emit("game_over", { roomId: rid, result: "win", winner: winner === "light" ? "white" : "black" });
     } else {
       socket.emit("game_over", { roomId: rid, result: "draw", drawReason: drawReason ?? undefined });
     }
   }, [status, winner, drawReason]);
 
-  // Auto-show result modal when game ends — only after game actually started
   useEffect(() => {
-    if (status !== "finished") return;
-    if (phase !== "finished") return;  // wait for socket to confirm game over
-    if (resultSentRef.current) return;
+    if (status !== "finished" || phase !== "finished" || resultSentRef.current) return;
     resultSentRef.current = true;
-
     if (winner) {
-      setModal({
-        type: "victory",
-        winner,
-        playerColor: ourColor,
-        reason: winner === ourColor ? "Você capturou todas as peças!" : "Oponente capturou todas as peças.",
-      });
+      setModal({ type: "victory", winner, playerColor: ourColor,
+        reason: winner === ourColor ? "Você capturou todas as peças!" : "Oponente capturou todas as peças." });
     } else {
       setModal({ type: "draw", reason: drawReason ?? "Empate" });
     }
@@ -125,66 +178,32 @@ export function Game() {
   const isPlaying  = phase === "playing" || phase === "draw-offered" || phase === "finished";
 
   const moveRows: Array<[string, string]> = [];
-  for (let i = 0; i < history.length; i += 2) {
+  for (let i = 0; i < history.length; i += 2)
     moveRows.push([history[i]?.notation ?? "", history[i + 1]?.notation ?? ""]);
-  }
 
-  const handleNewGame = () => {
-    resultSentRef.current = false;
-    setModal(null);
-    navigate("/play");
-  };
-  const handleMenu = () => { setModal(null); navigate("/play"); };
+  const handleNewGame     = () => { resultSentRef.current = false; setModal(null); navigate("/play"); };
+  const handleMenu        = () => { setModal(null); navigate("/play"); };
+  const handleResign      = () => { setModal(null); sendResign(); };
+  const handleDrawOffer   = () => { setModal(null); sendDrawOffer(); };
+  const handleAcceptDraw  = () => { setModal(null); sendDrawAccept(); };
+  const handleDeclineDraw = () => { setModal(null); sendDrawDecline(); useSocketStore.setState({ phase: "playing" }); };
 
-  const handleResign = () => {
-    setModal(null);
-    sendResign();
-  };
-
-  const handleDrawOffer = () => {
-    setModal(null);
-    sendDrawOffer();
-  };
-
-  const handleAcceptDraw = () => {
-    setModal(null);
-    sendDrawAccept();
-  };
-
-  const handleDeclineDraw = () => {
-    setModal(null);
-    sendDrawDecline();
-    useSocketStore.setState({ phase: "playing" });
-  };
-
-  const myName       = user?.username ?? "Você (Visitante)";
-  const myElo        = user ? String(user.elo) : "—";
-  const oppName      = isWaiting ? "Aguardando oponente…" : (opponentName ?? "Oponente");
-  const oppElo       = "—";
-
-  // For the board: top player is opponent, bottom is us
-  // seat=white → we are light (bottom), opponent is dark (top)
-  // seat=black → we are dark (bottom), opponent is light (top)
-  const topIsActive    = !isOurTurn && !isFinished && isPlaying;
-  const bottomIsActive = isOurTurn  && !isFinished && isPlaying;
+  const myName  = user?.username ?? "Você (Visitante)";
+  const myElo   = user ? String(user.elo) : "—";
+  const oppName = isWaiting ? "Aguardando oponente…" : (opponentName ?? "Oponente");
 
   return (
-    <motion.div
-      className={styles.page}
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.35 }}
-    >
+    <motion.div className={styles.page} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.35 }}>
       <div className={styles.layout}>
 
         <div className={styles.boardColumn}>
-          <PlayerBar name={oppName} rating={oppElo} isActive={topIsActive} />
+          <PlayerBar name={oppName} rating="—"
+            isActive={!isOurTurn && !isFinished && isPlaying}
+            timeLeft={clocks[oppClockIdx]} unlimited={unlimited} />
 
-          {/* Waiting overlay */}
           <div style={{ position: "relative", display: "inline-flex" }}>
             <DragBoard
-              playerColor={ourColor}
-              flipped={boardFlipped}
+              playerColor={ourColor} flipped={boardFlipped}
               disabled={!isPlaying || !isOurTurn || isFinished}
               onMove={sendMove}
             />
@@ -198,8 +217,7 @@ export function Game() {
                     <AnimatePresence mode="wait">
                       {copied
                         ? <motion.span key="ok"   initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}><RiCheckLine size={13} /></motion.span>
-                        : <motion.span key="copy" initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}><RiFileCopyLine size={13} /></motion.span>
-                      }
+                        : <motion.span key="copy" initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}><RiFileCopyLine size={13} /></motion.span>}
                     </AnimatePresence>
                     {copied ? "Copiado!" : "Copiar link"}
                   </button>
@@ -208,16 +226,12 @@ export function Game() {
             )}
           </div>
 
-          <PlayerBar
-            name={myName}
-            rating={myElo}
-            isSelf
-            isActive={bottomIsActive}
-          />
+          <PlayerBar name={myName} rating={myElo} isSelf
+            isActive={isOurTurn && !isFinished && isPlaying}
+            timeLeft={clocks[ourClockIdx]} unlimited={unlimited} />
         </div>
 
         <aside className={styles.sidebar}>
-
           <AnimatePresence mode="wait">
             <motion.div
               key={String(isOurTurn) + String(isFinished) + phase}
@@ -227,14 +241,12 @@ export function Game() {
             >
               <div className={`${styles.turnDisc} ${isOurTurn ? styles.discLight : styles.discDark}`} />
               <span>
-                {isWaiting ? "Aguardando…"
-                  : isFinished ? "Partida encerrada"
+                {isWaiting ? "Aguardando…" : isFinished ? "Partida encerrada"
                   : isOurTurn ? "Sua vez" : `Vez de ${oppName}`}
               </span>
             </motion.div>
           </AnimatePresence>
 
-          {/* Room code + copy */}
           <div className={styles.sideSection}>
             <div className={styles.sideSectionRow}>
               <RiWifiLine size={13} style={{ color: "var(--color-text-muted)" }} />
@@ -244,8 +256,7 @@ export function Game() {
                 <AnimatePresence mode="wait">
                   {copied
                     ? <motion.span key="ok"   initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}><RiCheckLine size={13} /></motion.span>
-                    : <motion.span key="copy" initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}><RiFileCopyLine size={13} /></motion.span>
-                  }
+                    : <motion.span key="copy" initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}><RiFileCopyLine size={13} /></motion.span>}
                 </AnimatePresence>
                 {copied ? "Copiado!" : "Copiar"}
               </button>
@@ -257,14 +268,14 @@ export function Game() {
           <div className={styles.moveSection}>
             <div className={styles.moveSectionHeader}>Lances</div>
             <div className={styles.moveGrid}>
-              {moveRows.length === 0 ? (
-                <div className={styles.moveEmpty}>Nenhum lance ainda</div>
-              ) : moveRows.map(([dark, light], i) => (
-                <>
-                  <span key={`d${i}`} className={styles.moveEntry}>{i + 1}. {dark}</span>
-                  <span key={`l${i}`} className={`${styles.moveEntry} ${styles.moveLight}`}>{light}</span>
-                </>
-              ))}
+              {moveRows.length === 0
+                ? <div className={styles.moveEmpty}>Nenhum lance ainda</div>
+                : moveRows.map(([dark, light], i) => (
+                  <>
+                    <span key={`d${i}`} className={styles.moveEntry}>{i + 1}. {dark}</span>
+                    <span key={`l${i}`} className={`${styles.moveEntry} ${styles.moveLight}`}>{light}</span>
+                  </>
+                ))}
             </div>
           </div>
 
@@ -283,32 +294,23 @@ export function Game() {
               </>
             ) : (
               <>
-                <Button variant="secondary" size="sm" fullWidth
-                  disabled={!isPlaying}
+                <Button variant="secondary" size="sm" fullWidth disabled={!isPlaying}
                   onClick={() => setModal({ type: "confirm-draw" })}>
                   <RiShakeHandsLine size={14} />Propor Empate
                 </Button>
-                <Button variant="danger" size="sm" fullWidth
-                  disabled={!isPlaying}
+                <Button variant="danger" size="sm" fullWidth disabled={!isPlaying}
                   onClick={() => setModal({ type: "confirm-resign" })}>
                   <RiFlagLine size={14} />Abandonar
                 </Button>
               </>
             )}
           </div>
-
         </aside>
       </div>
 
-      <GameModal
-        modal={modal}
-        onClose={() => setModal(null)}
-        onNewGame={handleNewGame}
-        onMenu={handleMenu}
-        onResign={handleResign}
-        onAcceptDraw={handleAcceptDraw}
-        onDeclineDraw={handleDeclineDraw}
-        onOfferDraw={handleDrawOffer}
+      <GameModal modal={modal} onClose={() => setModal(null)}
+        onNewGame={handleNewGame} onMenu={handleMenu} onResign={handleResign}
+        onAcceptDraw={handleAcceptDraw} onDeclineDraw={handleDeclineDraw} onOfferDraw={handleDrawOffer}
       />
     </motion.div>
   );
