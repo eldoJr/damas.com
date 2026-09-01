@@ -13,11 +13,18 @@ import { errorHandler } from "./middleware/errorHandler";
 const app    = express();
 const server = http.createServer(app);
 
-const io = new Server(server, {
-  cors: { origin: process.env.CLIENT_ORIGIN ?? "http://localhost:3000", credentials: true },
-});
+const allowedOrigins = (process.env.CLIENT_ORIGIN ?? "http://localhost:3000")
+  .split(",").map(o => o.trim());
 
-app.use(cors({ origin: process.env.CLIENT_ORIGIN ?? "http://localhost:3000", credentials: true }));
+const corsOptions = {
+  origin: (origin: string | undefined, cb: (e: Error | null, ok?: boolean) => void) =>
+    (!origin || allowedOrigins.includes(origin)) ? cb(null, true) : cb(new Error("CORS: " + origin)),
+  credentials: true,
+};
+
+const io = new Server(server, { cors: corsOptions });
+
+app.use(cors(corsOptions));
 app.use(express.json());
 
 app.get("/", (_req, res) => res.json({ name: "damas.com API", version: "1.0.0" }));
